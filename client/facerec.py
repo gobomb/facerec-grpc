@@ -8,8 +8,9 @@ import os
 from concurrent import futures
 from multiprocessing import Process, Manager, cpu_count, set_start_method
 import sys
+
 sys.path.append("rpc")
-import face_pb2 
+import face_pb2
 import face_pb2_grpc
 
 # Load a sample picture and learn how to recognize it.
@@ -31,21 +32,23 @@ known_face_names = [
 ]
 
 # Initialize some variables
-_HOST= '192.168.1.109'
-_PORT='9900'
-ideal_distance=0.35
+_HOST = '192.168.1.109'
+_PORT = '9900'
+ideal_distance = 0.35
+
 
 def encode_frame(pb_frame):
     # numpy to bytes
     nda_bytes = BytesIO()
     np.save(nda_bytes, pb_frame, allow_pickle=False)
     return nda_bytes
-            
+
+
 def decode_frame(ndarray):
     # bytes to numpy
     nda_bytes = BytesIO(ndarray)
     return np.load(nda_bytes, allow_pickle=False)
-            
+
 
 def find_face(rgb_small_frame):
     # Find all the faces and face encodings in the current frame of video
@@ -72,6 +75,7 @@ def find_face(rgb_small_frame):
         face_names.append(name)
     return face_locations, face_names
 
+
 def send_message(stub, worker_id):
     for response in stub.GetFrameStream(face_pb2.FrameRequest(ID=str(worker_id))):
         if response.Error:
@@ -80,21 +84,21 @@ def send_message(stub, worker_id):
             return
 
         face_locations, face_names = find_face(decode_frame(response.Rgb_small_frame))
-        locations = [] 
-        for i in range (0,len(face_locations)):
+        locations = []
+        for i in range(0, len(face_locations)):
             lc = []
-            for j in range(0,len(face_locations[i])):
+            for j in range(0, len(face_locations[i])):
                 lc.append(face_locations[i][j])
             locations.append(face_pb2.Location(Loc=lc))
         try:
             yield face_pb2.LocationsStream(
-            ID = response.ID,
-            Face_locations = locations,
-            Face_names = face_names,
-        )
+                ID=response.ID,
+                Face_locations=locations,
+                Face_names=face_names,
+            )
         except Exception as ex:
-                traceback.print_exc()
-       
+            traceback.print_exc()
+
 
 # def yieldLocations(stub, worker_id):
 #     for location in send_message(stub, worker_id):
@@ -116,15 +120,15 @@ def run():
     else:
         name = 'default'
     if 'NODE_HOST' in os.environ:
-        global _HOST 
+        global _HOST
         _HOST = os.environ['NODE_HOST']
     if 'DAEMON_PORT' in os.environ:
-        global _PORT 
+        global _PORT
         _PORT = os.environ['DAEMON_PORT']
 
-    for worker_id in range (0, worker_num):
-        worker_name =  name+'_'+str(worker_id)
-        print(worker_name+' start')
+    for worker_id in range(0, worker_num):
+        worker_name = name + '_' + str(worker_id)
+        print(worker_name + ' start')
         p.append(Process(target=client, args=(worker_name, worker_num,)))
         p[worker_id].start()
 
@@ -133,7 +137,7 @@ def client(worker_id, worker_num):
     with grpc.insecure_channel(_HOST + ':' + _PORT) as channel:
         stub = face_pb2_grpc.FaceServiceStub(channel)
         try:
-            stub.DisplayLocations(send_message(stub,worker_id))
+            stub.DisplayLocations(send_message(stub, worker_id))
             print("try")
         except StopIteration as si:
             print("StopIteration")

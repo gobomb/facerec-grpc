@@ -13,12 +13,13 @@ import numpy
 import threading
 
 import platform
+
 sys.path.append("rpc")
-import face_pb2 
+import face_pb2
 import face_pb2_grpc
 
-_HOST='0.0.0.0'
-_PORT='9900'
+_HOST = '0.0.0.0'
+_PORT = '9900'
 _RPC_WORKER = 8
 
 
@@ -27,47 +28,49 @@ def encode_frame(pb_frame):
     nda_bytes = BytesIO()
     np.save(nda_bytes, pb_frame, allow_pickle=False)
     return nda_bytes
-            
+
+
 def decode_frame(nda_bytes):
     # bytes to numpy
     nda_bytes = BytesIO(nda_proto.ndarray)
     return np.load(nda_bytes, allow_pickle=False)
-            
+
+
 class FaceService(face_pb2_grpc.FaceServiceServicer):
-    def GetFrameStream(self,request,context):
+    def GetFrameStream(self, request, context):
         worker_id, read_frame_list, write_frame_list, Global, worker_num = rpc_helper.getVal()
         Global.is_called = True
         print("\rIncomming connection which ID is: {0}".format(request.ID))
         try:
             while not Global.is_exit:
-                        # Wait to read
-                        while  Global.read_num != prev_id(Global.buff_num, worker_num):
-                            # If the user has requested to end the app, then stop waiting for webcam frames
-                            if Global.is_exit:
-                                break
+                # Wait to read
+                while Global.read_num != prev_id(Global.buff_num, worker_num):
+                    # If the user has requested to end the app, then stop waiting for webcam frames
+                    if Global.is_exit:
+                        break
 
-                            time.sleep(0.01)
+                    time.sleep(0.01)
 
-                        # Delay to make the video look smoother
-                        time.sleep(Global.frame_delay)
+                # Delay to make the video look smoother
+                #                        time.sleep(Global.frame_delay)
 
-                        # Read a single frame from frame list
-                        frame_process = read_frame_list[Global.read_num]
+                # Read a single frame from frame list
+                frame_process = read_frame_list[Global.read_num]
 
-                        # # Expect next worker to read frame
-                        # Global.read_num = next_id(Global.read_num, worker_num)
+                # # Expect next worker to read frame
+                # Global.read_num = next_id(Global.read_num, worker_num)
 
-                        # Convert the image from BGR color (which OpenCV uses) to RGB color (which face_recognition uses)
-                        rgb_frame = frame_process[:, :, ::-1]
-                        
-                        byteFrame = encode_frame(rgb_frame).getvalue()
-                        
-                        yield face_pb2.FrameStream(
-                                ID = request.ID,
-                                Rgb_small_frame = byteFrame ,
-                                Status = face_pb2.STATUS_OK,
-                        )   
-                        
+                # Convert the image from BGR color (which OpenCV uses) to RGB color (which face_recognition uses)
+                rgb_frame = frame_process[:, :, ::-1]
+
+                byteFrame = encode_frame(rgb_frame).getvalue()
+
+                yield face_pb2.FrameStream(
+                    ID=request.ID,
+                    Rgb_small_frame=byteFrame,
+                    Status=face_pb2.STATUS_OK,
+                )
+
         except Exception as ex:
             traceback.print_exc()
             Global.is_called = False
@@ -76,8 +79,7 @@ class FaceService(face_pb2_grpc.FaceServiceServicer):
             Global.is_called = False
             print("\rIncomming connection closed which ID: {0}".format(request.ID))
 
-        
-    def DisplayLocations(self,request_iterator,context):
+    def DisplayLocations(self, request_iterator, context):
         worker_id, read_frame_list, write_frame_list, Global, worker_num = rpc_helper.getVal()
         Global.is_called = True
 
@@ -86,7 +88,7 @@ class FaceService(face_pb2_grpc.FaceServiceServicer):
                 # get face_locations, face_names
                 face_names = message.Face_names
                 face_locations = []
-                for i in range (0,len(message.Face_locations)):
+                for i in range(0, len(message.Face_locations)):
                     face_locations.append(tuple(message.Face_locations[i].Loc))
 
                 # Read a single frame from frame list
@@ -116,7 +118,7 @@ class FaceService(face_pb2_grpc.FaceServiceServicer):
                 Global.write_num = next_id(Global.write_num, worker_num)
 
             return face_pb2.LocationResponse(
-                Status = face_pb2.STATUS_OK,
+                Status=face_pb2.STATUS_OK,
             )
         except grpc.RpcError as rpc_error_call:
             details = rpc_error_call.details()
@@ -129,20 +131,21 @@ class FaceService(face_pb2_grpc.FaceServiceServicer):
             Global.is_called = False
             print("\rDisplay face cube stop -- ID: {0}".format(request.ID))
 
-        
-
 
 class helper():
-    def setVal(self,worker_id, read_frame_list, write_frame_list, Global, worker_num):
+    def setVal(self, worker_id, read_frame_list, write_frame_list, Global, worker_num):
         helper.worker_id = worker_id
         helper.read_frame_list = read_frame_list
         helper.write_frame_list = write_frame_list
         helper.Global = Global
         helper.worker_num = worker_num
+
     def getVal(self):
-        return helper.worker_id,helper.read_frame_list ,helper.write_frame_list,helper.Global ,helper.worker_num 
+        return helper.worker_id, helper.read_frame_list, helper.write_frame_list, helper.Global, helper.worker_num
+
 
 rpc_helper = helper()
+
 
 def serve(worker_id, read_frame_list, write_frame_list, Global, worker_num):
     print("start serving rpc")
@@ -158,10 +161,11 @@ def serve(worker_id, read_frame_list, write_frame_list, Global, worker_num):
 
 
 def frame_helper(worker_id, read_frame_list, write_frame_list, Global, worker_num):
-    print("frame_helper {0}/{1} start".format(worker_id,worker_num))
+    print("frame_helper {0}/{1} start".format(worker_id, worker_num))
     while not Global.is_exit:
         # Wait to read
-        while Global.is_called or  Global.read_num != worker_id or Global.read_num != prev_id(Global.buff_num, worker_num):
+        while Global.is_called or Global.read_num != worker_id or Global.read_num != prev_id(Global.buff_num,
+                                                                                             worker_num):
 
             # If the user has requested to end the app, then stop waiting for webcam frames
             if Global.is_exit:
@@ -170,14 +174,14 @@ def frame_helper(worker_id, read_frame_list, write_frame_list, Global, worker_nu
             time.sleep(0.01)
 
         # Delay to make the video look smoother
-        time.sleep(Global.frame_delay)
+        # time.sleep(Global.frame_delay)
 
         # Read a single frame from frame list
         frame_process = read_frame_list[worker_id]
 
         # Expect next worker to read frame
         Global.read_num = next_id(Global.read_num, worker_num)
-        
+
         # Wait to write
         while Global.write_num != worker_id:
             time.sleep(0.01)
@@ -187,6 +191,7 @@ def frame_helper(worker_id, read_frame_list, write_frame_list, Global, worker_nu
 
         # Expect next worker to write frame
         Global.write_num = next_id(Global.write_num, worker_num)
+
 
 # Get next worker's id
 def next_id(current_id, worker_num):
@@ -230,7 +235,6 @@ def capture(read_frame_list, Global, worker_num):
 
 
 def run():
-
     # Fix Bug on MacOS
     if platform.system() == 'Darwin':
         set_start_method('forkserver')
@@ -268,17 +272,13 @@ def run():
     p.append(threading.Thread(target=capture, args=(read_frame_list, Global, worker_num,)))
     p[0].start()
 
-
-
-
     # Create workers
     for worker_id in range(1, worker_num + 1):
         p.append(Process(target=frame_helper, args=(worker_id, read_frame_list, write_frame_list, Global, worker_num,)))
         p[worker_id].start()
 
     p.append(Process(target=serve, args=(8, read_frame_list, write_frame_list, Global, worker_num,)))
-    p[worker_num+1].start()
-
+    p[worker_num + 1].start()
 
     # Start to show video
     last_num = 1
@@ -297,10 +297,8 @@ def run():
                 fps_list.pop(0)
             fps = len(fps_list) / numpy.sum(fps_list)
 
-            sys.stdout.write("\r fps: %.2f" %fps)
+            sys.stdout.write("\r fps: %.2f" % fps)
             sys.stdout.flush()
-
-
 
             # Calculate frame delay, in order to make the video look smoother.
             # When fps is higher, should use a smaller ratio, or fps will be limited in a lower value.
