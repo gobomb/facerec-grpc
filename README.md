@@ -1,4 +1,4 @@
-# Install openvc and face_recognition
+# Install OpenCV and face_recognition
 
 See https://github.com/ageitgey/face_recognition
 
