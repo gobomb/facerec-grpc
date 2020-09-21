@@ -23,13 +23,13 @@ _RPC_WORKER = 8
 
 
 def encode_frame(pb_frame):
-    # numpy 转 bytes
+    # numpy to bytes
     nda_bytes = BytesIO()
     np.save(nda_bytes, pb_frame, allow_pickle=False)
     return nda_bytes
             
 def decode_frame(nda_bytes):
-    # bytes转numpy
+    # bytes to numpy
     nda_bytes = BytesIO(nda_proto.ndarray)
     return np.load(nda_bytes, allow_pickle=False)
             
@@ -119,8 +119,6 @@ class FaceService(face_pb2_grpc.FaceServiceServicer):
                 Status = face_pb2.STATUS_OK,
             )
         except grpc.RpcError as rpc_error_call:
-            code = rpc_error_call.code()
-            print(code, file=sys.stderr)
             details = rpc_error_call.details()
             print("err='RPCError DisplayLocations'")
             print("errMore=\"" + details + "\"")
