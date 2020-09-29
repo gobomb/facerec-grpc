@@ -20,7 +20,7 @@ import face_pb2_grpc
 
 _HOST = '0.0.0.0'
 _PORT = '9900'
-_RPC_WORKER = 8
+_RPC_WORKER = 2
 
 
 def encode_frame(pb_frame):
@@ -43,22 +43,8 @@ class FaceService(face_pb2_grpc.FaceServiceServicer):
         print("\rIncomming connection which ID is: {0}".format(request.ID))
         try:
             while not Global.is_exit:
-                # Wait to read
-                while Global.read_num != prev_id(Global.buff_num, worker_num):
-                    # If the user has requested to end the app, then stop waiting for webcam frames
-                    if Global.is_exit:
-                        break
-
-                    time.sleep(0.01)
-
-                # Delay to make the video look smoother
-                #                        time.sleep(Global.frame_delay)
-
                 # Read a single frame from frame list
                 frame_process = read_frame_list[Global.read_num]
-
-                # # Expect next worker to read frame
-                # Global.read_num = next_id(Global.read_num, worker_num)
 
                 # Convert the image from BGR color (which OpenCV uses) to RGB color (which face_recognition uses)
                 rgb_frame = frame_process[:, :, ::-1]
@@ -86,36 +72,14 @@ class FaceService(face_pb2_grpc.FaceServiceServicer):
         try:
             for message in request_iterator:
                 # get face_locations, face_names
+                global face_names, face_locations
                 face_names = message.Face_names
                 face_locations = []
                 for i in range(0, len(message.Face_locations)):
                     face_locations.append(tuple(message.Face_locations[i].Loc))
 
-                # Read a single frame from frame list
-                frame_process = read_frame_list[Global.read_num]
-                # Expect next worker to read frame
-                Global.read_num = next_id(Global.read_num, worker_num)
-
-                # Display the results
-
-                for (top, right, bottom, left), name in zip(face_locations, face_names):
-                    # Draw a box around the face
-                    cv2.rectangle(frame_process, (left, top), (right, bottom), (0, 0, 255), 2)
-
-                    # Draw a label with a name below the face
-                    cv2.rectangle(frame_process, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
-                    font = cv2.FONT_HERSHEY_DUPLEX
-                    cv2.putText(frame_process, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
-
-                # # Wait to write
-                # while Global.write_num != worker_id:
-                #     time.sleep(0.01)
-
-                # Send frame to global
-                write_frame_list[Global.write_num] = frame_process
-
-                # Expect next worker to write frame
-                Global.write_num = next_id(Global.write_num, worker_num)
+                Global.face_names = face_names
+                Global.face_locations = face_locations
 
             return face_pb2.LocationResponse(
                 Status=face_pb2.STATUS_OK,
@@ -129,7 +93,6 @@ class FaceService(face_pb2_grpc.FaceServiceServicer):
             Global.is_called = False
         finally:
             Global.is_called = False
-            print("\rDisplay face cube stop -- ID: {0}".format(request.ID))
 
 
 class helper():
@@ -147,9 +110,35 @@ class helper():
 rpc_helper = helper()
 
 
+def display(worker_id, read_frame_list, write_frame_list, Global, worker_num):
+    face_names = Global.face_names
+    face_locations = Global.face_locations
+
+    # Read a single frame from frame list
+    frame_process = read_frame_list[worker_id]
+    # Expect next worker to read frame
+    Global.read_num = next_id(Global.read_num, worker_num)
+
+    # Display the results
+
+    for (top, right, bottom, left), name in zip(face_locations, face_names):
+        # Draw a box around the face
+        cv2.rectangle(frame_process, (left, top), (right, bottom), (0, 0, 255), 2)
+
+        # Draw a label with a name below the face
+        cv2.rectangle(frame_process, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
+        font = cv2.FONT_HERSHEY_DUPLEX
+        cv2.putText(frame_process, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
+
+    # Send frame to global
+    write_frame_list[worker_id] = frame_process
+
+    # Expect next worker to write frame
+    Global.write_num = next_id(Global.write_num, worker_num)
+
+
 def serve(worker_id, read_frame_list, write_frame_list, Global, worker_num):
     print("start serving rpc")
-
     rpc_helper.setVal(worker_id, read_frame_list, write_frame_list, Global, worker_num)
     grpcServer = grpc.server(futures.ThreadPoolExecutor(max_workers=_RPC_WORKER))
     face_pb2_grpc.add_FaceServiceServicer_to_server(FaceService(), grpcServer)
@@ -162,10 +151,11 @@ def serve(worker_id, read_frame_list, write_frame_list, Global, worker_num):
 
 def frame_helper(worker_id, read_frame_list, write_frame_list, Global, worker_num):
     print("frame_helper {0}/{1} start".format(worker_id, worker_num))
+
     while not Global.is_exit:
         # Wait to read
-        while Global.is_called or Global.read_num != worker_id or Global.read_num != prev_id(Global.buff_num,
-                                                                                             worker_num):
+        while Global.read_num != worker_id or Global.read_num != prev_id(Global.buff_num,
+                                                                         worker_num):
 
             # If the user has requested to end the app, then stop waiting for webcam frames
             if Global.is_exit:
@@ -173,24 +163,7 @@ def frame_helper(worker_id, read_frame_list, write_frame_list, Global, worker_nu
 
             time.sleep(0.01)
 
-        # Delay to make the video look smoother
-        # time.sleep(Global.frame_delay)
-
-        # Read a single frame from frame list
-        frame_process = read_frame_list[worker_id]
-
-        # Expect next worker to read frame
-        Global.read_num = next_id(Global.read_num, worker_num)
-
-        # Wait to write
-        while Global.write_num != worker_id:
-            time.sleep(0.01)
-
-        # Send frame to global
-        write_frame_list[worker_id] = frame_process
-
-        # Expect next worker to write frame
-        Global.write_num = next_id(Global.write_num, worker_num)
+        display(worker_id, read_frame_list, write_frame_list, Global, worker_num)
 
 
 # Get next worker's id
@@ -244,26 +217,20 @@ def run():
     Global.buff_num = 1
     Global.read_num = 1
     Global.write_num = 1
-    Global.frame_delay = 0
     Global.is_exit = False
     Global.is_called = False
+    Global.face_names = []
+    Global.face_locations = []
     read_frame_list = Manager().dict()
     write_frame_list = Manager().dict()
 
-    if 'WORKER_NUM' in os.environ:
-        worker_num = os.environ['WORKER_NUM']
-    else:
-        name = 'default'
-
-    # Number of workers (subprocess use to process frames)
-    if cpu_count() > 2:
-        worker_num = cpu_count() - 2  # 1 for capturing frames, 1 for rpc server
-    else:
-        worker_num = 2
+    # # Number of workers (subprocess use to process frames)
+    # if cpu_count() > 2:
+    #     worker_num = cpu_count() - 2  # 1 for capturing frames, 1 for rpc server
+    # else:
+    #     worker_num = 2
 
     worker_num = 2
-
-    Global.rpc_id = worker_num + 1
 
     # Subprocess list
     p = []
@@ -277,7 +244,8 @@ def run():
         p.append(Process(target=frame_helper, args=(worker_id, read_frame_list, write_frame_list, Global, worker_num,)))
         p[worker_id].start()
 
-    p.append(Process(target=serve, args=(8, read_frame_list, write_frame_list, Global, worker_num,)))
+    # Create rpc server
+    p.append(Process(target=serve, args=(worker_num + 1, read_frame_list, write_frame_list, Global, worker_num,)))
     p[worker_num + 1].start()
 
     # Start to show video
@@ -299,20 +267,6 @@ def run():
 
             sys.stdout.write("\r fps: %.2f" % fps)
             sys.stdout.flush()
-
-            # Calculate frame delay, in order to make the video look smoother.
-            # When fps is higher, should use a smaller ratio, or fps will be limited in a lower value.
-            # Larger ratio can make the video look smoother, but fps will hard to become higher.
-            # Smaller ratio can make fps higher, but the video looks not too smoother.
-            # The ratios below are tested many times.
-            if fps < 6:
-                Global.frame_delay = (1 / fps) * 0.75
-            elif fps < 20:
-                Global.frame_delay = (1 / fps) * 0.5
-            elif fps < 30:
-                Global.frame_delay = (1 / fps) * 0.25
-            else:
-                Global.frame_delay = 0
 
             # Display the resulting image
             cv2.imshow('Video', write_frame_list[prev_id(Global.write_num, worker_num)])

@@ -34,7 +34,7 @@ known_face_names = [
 # Initialize some variables
 _HOST = '192.168.1.109'
 _PORT = '9900'
-ideal_distance = 0.35
+ideal_distance = 0.45
 
 
 def encode_frame(pb_frame):
@@ -71,6 +71,7 @@ def find_face(rgb_small_frame):
                 name = known_face_names[best_match_index]
         else:
             name = "Unknown"
+        print("find_face {0}/{1}".format(name, face_distances))
 
         face_names.append(name)
     return face_locations, face_names
@@ -112,9 +113,7 @@ def send_message(stub, worker_id):
 
 def run():
     p = []
-    worker_num = 3
-    if 'WORKER_NUM' in os.environ:
-        worker_num = int(os.environ['WORKER_NUM'])
+    worker_num = 1
     if 'PODNAME' in os.environ:
         name = os.environ['PODNAME']
     else:
@@ -138,7 +137,6 @@ def client(worker_id, worker_num):
         stub = face_pb2_grpc.FaceServiceStub(channel)
         try:
             stub.DisplayLocations(send_message(stub, worker_id))
-            print("try")
         except StopIteration as si:
             print("StopIteration")
             traceback.print_exc()
