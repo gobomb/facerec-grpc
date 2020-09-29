@@ -11,6 +11,7 @@ from multiprocessing import Process, Manager, cpu_count, set_start_method
 import time
 import numpy
 import threading
+import signal
 
 import platform
 
@@ -146,7 +147,10 @@ def serve(worker_id, read_frame_list, write_frame_list, Global, worker_num):
     grpcServer.add_insecure_port("{0}:{1}".format(_HOST, _PORT))
     grpcServer.start()
     print("waiting for incomming connection at {0}:{1}".format(_HOST, _PORT))
-    grpcServer.wait_for_termination()
+    # grpcServer.wait_for_termination()
+    while True:
+        if Global.is_exit:
+            break
 
 
 def frame_helper(worker_id, read_frame_list, write_frame_list, Global, worker_num):
